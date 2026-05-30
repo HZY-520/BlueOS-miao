@@ -1,0 +1,1147 @@
+<template>
+  <div class="page">
+    <image class="room-bg" src="/assets/images/ui/room_background.png" />
+
+    <div class="content">
+      <div class="top-bar">
+        <div class="coin-pill">
+          <image class="mini-icon" src="/assets/images/ui/coin.png" />
+          <text class="coin-text">{{ coins }}</text>
+        </div>
+
+        <div class="step-pill" onclick="handleRedeem">
+          <text class="step-title">{{ stepText }}</text>
+          <text class="step-sub">{{ redeemText }}</text>
+        </div>
+
+        <div class="checkin-pill" onclick="handleCheckIn">
+          <image class="mini-icon" src="/assets/images/ui/checkin_gift.png" />
+          <text class="checkin-text">{{ checkInLabel }}</text>
+          <text class="checkin-sub">{{ checkInRewardText }}</text>
+        </div>
+      </div>
+
+      <text class="message">{{ message }}</text>
+    </div>
+
+    <div class="action-row">
+      <div
+        class="action-button"
+        for="{{ actionButtons }}"
+        key="{{$item.id}}"
+        onclick="handleAction($item.id)">
+        <image class="action-icon" src="{{ $item.icon }}" />
+        <text class="action-label">{{ $item.label }}</text>
+        <text class="action-stock">{{ $item.stockText }}</text>
+      </div>
+
+      <div class="action-button shop-button" onclick="toggleShop">
+        <image class="action-icon" src="/assets/images/ui/shop_bag.png" />
+        <text class="action-label">商店</text>
+        <text class="action-stock">购买</text>
+      </div>
+    </div>
+
+    <div class="info-panel">
+      <div class="pet-line">
+        <text class="pet-name">{{ petName }}</text>
+        <text class="pet-meta">
+          Lv.{{ level }} · {{ stageName }} · {{ ageText }}
+        </text>
+      </div>
+      <div class="exp-row">
+        <text class="exp-label">经验</text>
+        <div class="exp-track">
+          <div class="exp-fill" style="width: {{ expWidth }}"></div>
+        </div>
+        <text class="exp-text">{{ expText }}</text>
+      </div>
+      <div class="status-row" for="{{ statusBars }}" key="{{$item.key}}">
+        <image class="status-icon" src="{{ $item.icon }}" />
+        <text class="status-label">{{ $item.label }}</text>
+        <div class="status-track">
+          <div
+            class="status-fill"
+            style="width: {{ $item.width }}; background-color: {{ $item.color }}"></div>
+        </div>
+        <text class="status-value">{{ $item.text }}</text>
+      </div>
+    </div>
+
+    <div class="pet-zone">
+      <div class="pet-stage" id="petStage" onclick="handlePetTap">
+        <image-animator
+          class="pet-sprite"
+          id="petAnimator"
+          images="{{ petFrames }}"
+          iteration="infinite"
+          show="{{ isIdlePose }}" />
+        <image
+          class="pet-sprite"
+          id="petStatic"
+          src="{{ petImage }}"
+          show="{{ showStaticPet }}" />
+        <image
+          class="bow-accessory"
+          src="/assets/images/ui/item_bow.png"
+          show="{{ hasBow }}" />
+      </div>
+    </div>
+
+    <div class="shop-panel" show="{{ showShop }}">
+      <div class="shop-head">
+        <text class="shop-title">猫猫商店</text>
+        <text class="shop-close" onclick="toggleShop">关闭</text>
+      </div>
+      <div class="shop-list">
+        <div
+          class="shop-item"
+          for="{{ shopItems }}"
+          key="{{$item.id}}"
+          onclick="handleBuy($item.id)">
+          <image class="shop-icon" src="{{ $item.icon }}" />
+          <div class="shop-copy">
+            <text class="shop-name">{{ $item.name }}</text>
+            <text class="shop-desc">
+              {{ $item.desc }} · {{ $item.stockText }}
+            </text>
+          </div>
+          <div class="shop-price-box">
+            <image class="price-icon" src="/assets/images/ui/coin.png" />
+            <text class="shop-price">{{ $item.priceText }}</text>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="name-mask" show="{{ showNameSetup }}">
+      <div class="name-card">
+        <text class="name-title">给猫咪取个名字</text>
+        <text class="name-desc">{{ nameDesc }}</text>
+        <input
+          class="name-input"
+          id="nameInput"
+          type="text"
+          value="{{ draftPetName }}"
+          placeholder="输入名字"
+          onchange="handleNameInput" />
+        <div class="name-actions">
+          <text class="name-button secondary" onclick="focusNameInput">
+            输入
+          </text>
+          <text class="name-button primary" onclick="confirmPetName">保存</text>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+  import health from '@blueos.health.health'
+  import sensor from '@blueos.hardware.sensor.sensor'
+  import storage from '@blueos.storage.storage'
+  import {
+    SAVE_KEY,
+    applyOfflineDecay,
+    buildViewModel,
+    buyShopItem,
+    claimDailyCheckIn,
+    createDefaultSave,
+    loadSave,
+    redeemSteps,
+    setPetName,
+    tapPet,
+    useActionItem,
+  } from './../../game/petGame.js'
+
+  const DEFAULT_MESSAGE = '摸摸猫猫，今天也要元气满满'
+
+  export default {
+    data: {
+      save: createDefaultSave(),
+      petName: '猫猫',
+      coins: 20,
+      level: 1,
+      stageName: '幼猫',
+      ageText: '第1天',
+      expText: '0/24',
+      expWidth: '0%',
+      statusBars: [],
+      actionButtons: [],
+      shopItems: [],
+      petFrames: [],
+      petImage: '/assets/images/pet/kitten_idle_1.png',
+      isIdlePose: true,
+      showStaticPet: false,
+      hasBow: false,
+      todaySteps: 0,
+      stepAvailable: true,
+      stepText: '读取步数',
+      redeemText: '兑换',
+      checkInLabel: '签到',
+      checkInRewardText: '+12',
+      message: DEFAULT_MESSAGE,
+      showShop: false,
+      showNameSetup: false,
+      draftPetName: '',
+      nameDesc: '这是它以后显示的宠物名字',
+      liveStepText: '',
+    },
+
+    onInit() {
+      this.loadGame()
+      this.ensureNameSetup()
+      this.rebuildView()
+    },
+
+    onReady() {
+      this.startIdleAnimator()
+      this.focusNameInputLater()
+    },
+
+    onShow() {
+      this.save = applyOfflineDecay(this.save, Date.now())
+      this.saveGame()
+      this.ensureNameSetup()
+      this.rebuildView()
+      this.refreshTodaySteps({ shouldRedeem: true, silent: true, auto: true })
+      this.startStepCounter()
+    },
+
+    onHide() {
+      this.persistAndStop()
+    },
+
+    onDestroy() {
+      this.persistAndStop()
+      this.clearTimers()
+    },
+
+    loadGame() {
+      let raw = ''
+      try {
+        raw = storage.getSync({ key: SAVE_KEY })
+      } catch (error) {
+        raw = ''
+      }
+      this.save = applyOfflineDecay(loadSave(raw, Date.now()), Date.now())
+      this.saveGame()
+    },
+
+    ensureNameSetup() {
+      const name = this.save.petName || ''
+      this.petName = name || '猫猫'
+      this.draftPetName = this.draftPetName || name
+      this.showNameSetup = !name
+      if (this.showNameSetup) {
+        this.showShop = false
+        this.nameDesc = '这是它以后显示的宠物名字'
+        this.focusNameInputLater()
+      }
+    },
+
+    saveGame() {
+      try {
+        storage.set({
+          key: SAVE_KEY,
+          value: JSON.stringify(this.save),
+        })
+      } catch (error) {
+        console.log(`save failed: ${error}`)
+      }
+    },
+
+    persistAndStop() {
+      this.save.lastSeenAt = Date.now()
+      this.saveGame()
+      this.stopStepCounter()
+      this.clearTimers()
+    },
+
+    rebuildView(pose) {
+      const view = buildViewModel(this.save, this.todaySteps, Date.now(), pose)
+      this.petName = this.save.petName || '猫猫'
+      this.coins = this.save.coins
+      this.level = this.save.level
+      this.stageName = view.stage.name
+      this.ageText = `第${view.ageDays + 1}天`
+      this.expText = `${this.save.exp}/${view.expToNext}`
+      this.expWidth = `${Math.min(100, Math.floor((this.save.exp / view.expToNext) * 100))}%`
+      this.statusBars = view.statusBars
+      this.actionButtons = view.actions
+      this.shopItems = view.shopItems
+      this.petFrames = view.petFrames
+      this.petImage = view.petImage
+      this.isIdlePose = view.isIdlePose
+      this.showStaticPet = !view.isIdlePose
+      this.hasBow = view.hasBow
+      this.checkInLabel = view.checkIn.available
+        ? view.checkIn.nextText
+        : '已签'
+      this.checkInRewardText = view.checkIn.available
+        ? view.checkIn.rewardText
+        : '明天'
+      this.redeemText =
+        view.redeem.redeemableCoins > 0
+          ? `可兑 ${view.redeem.redeemableCoins}`
+          : '100步=1币'
+      this.stepText = this.stepAvailable
+        ? `${view.redeem.todaySteps}步`
+        : '步数不可用'
+      this.startIdleAnimator()
+    },
+
+    refreshTodaySteps(options) {
+      const shouldRedeem =
+        typeof options === 'boolean'
+          ? options
+          : !!(options && options.shouldRedeem)
+      const silent = !!(options && options.silent)
+      const auto = !!(options && options.auto)
+      const requestId = (this._stepRequestId || 0) + 1
+      this._stepRequestId = requestId
+      this.stepText = '读取步数'
+
+      this.fetchTodaySteps(
+        (steps) => {
+          if (requestId !== this._stepRequestId) {
+            return
+          }
+          this.todaySteps = steps
+          this.stepAvailable = true
+          if (shouldRedeem) {
+            this.redeemCurrentSteps({ silent, auto })
+          } else {
+            this.rebuildView()
+          }
+        },
+        () => {
+          if (requestId !== this._stepRequestId) {
+            return
+          }
+          this.stepAvailable = false
+          this.stepText = '步数不可用'
+          if (shouldRedeem && !silent) {
+            this.flashMessage('暂时读不到步数，稍后再试')
+          }
+          this.rebuildView()
+        }
+      )
+    },
+
+    fetchTodaySteps(success, fail) {
+      const now = Date.now()
+      const todayStart = new Date(now)
+      todayStart.setHours(0, 0, 0, 0)
+      try {
+        health.getStatistic({
+          dataType: this.getStepDataType(),
+          statisticType: this.getStepSumType(),
+          startTime: todayStart.getTime(),
+          endTime: now,
+          success: (data) => {
+            const steps = this.readStepValue(data)
+            if (steps > 0) {
+              success(steps)
+            } else {
+              this.fetchTodayStepsFallback(success, () => success(steps))
+            }
+          },
+          fail: () => {
+            this.fetchTodayStepsFallback(success, fail)
+          },
+        })
+      } catch (error) {
+        this.fetchTodayStepsFallback(success, fail)
+      }
+    },
+
+    fetchTodayStepsFallback(success, fail) {
+      try {
+        health.getTodayStatistic({
+          dataType: this.getStepDataType(),
+          statisticType: this.getStepSumType(),
+          success: (data) => {
+            success(this.readStepValue(data))
+          },
+          fail,
+        })
+      } catch (error) {
+        fail()
+      }
+    },
+
+    getStepDataType() {
+      if (health.DATA_TYPES && health.DATA_TYPES.STEP_COUNT !== undefined) {
+        return health.DATA_TYPES.STEP_COUNT
+      }
+      return 5
+    },
+
+    getStepSumType() {
+      if (health.STATISTIC_TYPES && health.STATISTIC_TYPES.SUM !== undefined) {
+        return health.STATISTIC_TYPES.SUM
+      }
+      return 1
+    },
+
+    readStepValue(data) {
+      if (Array.isArray(data)) {
+        return data.reduce((total, item) => total + this.readStepValue(item), 0)
+      }
+      if (data === null || data === undefined) {
+        return 0
+      }
+      if (typeof data === 'number' || typeof data === 'string') {
+        return Math.max(0, Number(data) || 0)
+      }
+      if (data.data !== undefined) {
+        return this.readStepValue(data.data)
+      }
+      if (data.value !== undefined) {
+        return this.readStepValue(data.value)
+      }
+      if (data.steps !== undefined) {
+        return this.readStepValue(data.steps)
+      }
+      return 0
+    },
+
+    startStepCounter() {
+      if (this._sensorActive) {
+        return
+      }
+      try {
+        this._sensorBase = null
+        sensor.subscribeStepCounter({
+          callback: (ret) => {
+            const steps = ret && ret.steps ? Number(ret.steps) : 0
+            this._lastSensorSteps = Math.max(0, steps)
+            if (this._sensorBase === null) {
+              this._sensorBase = steps
+            }
+            const liveSteps = Math.max(0, steps - this._sensorBase)
+            this.liveStepText = liveSteps > 0 ? `实时 +${liveSteps}` : ''
+          },
+          fail: () => {
+            this.liveStepText = ''
+          },
+        })
+        this._sensorActive = true
+      } catch (error) {
+        this.liveStepText = ''
+      }
+    },
+
+    stopStepCounter() {
+      if (!this._sensorActive) {
+        return
+      }
+      try {
+        sensor.unsubscribeStepCounter()
+      } catch (error) {}
+      this._sensorActive = false
+    },
+
+    handleNameInput({ value }) {
+      this.draftPetName = value || ''
+      this.nameDesc = '这是它以后显示的宠物名字'
+    },
+
+    focusNameInput() {
+      try {
+        const input = this.$element('nameInput')
+        if (input) {
+          input.focus()
+        }
+      } catch (error) {}
+    },
+
+    focusNameInputLater() {
+      if (!this.showNameSetup) {
+        return
+      }
+      if (this._nameFocusTimer) {
+        clearTimeout(this._nameFocusTimer)
+      }
+      this._nameFocusTimer = setTimeout(() => {
+        this._nameFocusTimer = null
+        this.focusNameInput()
+      }, 220)
+    },
+
+    confirmPetName() {
+      const result = setPetName(this.save, this.draftPetName, Date.now())
+      this.save = result.save
+      if (!result.didSet) {
+        this.nameDesc = result.message
+        this.flashMessage(result.message)
+        this.focusNameInputLater()
+        return
+      }
+      this.saveGame()
+      this.showNameSetup = false
+      this.petName = this.save.petName
+      this.flashMessage(result.message)
+      this.rebuildView('happy')
+      this.playPetBounce()
+      this.returnToIdleLater()
+    },
+
+    handleCheckIn() {
+      const result = claimDailyCheckIn(this.save, Date.now(), Math.random)
+      this.save = result.save
+      this.saveGame()
+      this.flashMessage(result.message)
+      this.rebuildView(result.pose)
+      if (result.didClaim) {
+        this.playPetBounce()
+      }
+      this.returnToIdleLater()
+    },
+
+    handleRedeem() {
+      this.refreshTodaySteps(true)
+    },
+
+    redeemCurrentSteps(options) {
+      const silent = !!(options && options.silent)
+      const auto = !!(options && options.auto)
+      if (!this.stepAvailable) {
+        if (!silent) {
+          this.flashMessage('暂时读不到步数，稍后再试')
+        }
+        return
+      }
+      const result = redeemSteps(this.save, this.todaySteps, Date.now())
+      this.save = result.save
+      this.saveGame()
+      if (!silent || result.didRedeem) {
+        this.flashMessage(
+          auto && result.didRedeem ? `自动${result.message}` : result.message
+        )
+      }
+      this.rebuildView(result.didRedeem ? 'happy' : undefined)
+      if (result.didRedeem) {
+        this.playPetBounce()
+      }
+      this.returnToIdleLater()
+    },
+
+    handleAction(actionId) {
+      const result = useActionItem(this.save, actionId, Date.now())
+      this.save = result.save
+      this.saveGame()
+      this.flashMessage(result.message)
+      this.rebuildView(result.pose)
+      if (result.didUse) {
+        this.playPetBounce()
+      }
+      this.returnToIdleLater()
+    },
+
+    handlePetTap() {
+      if (this.showNameSetup) {
+        return
+      }
+      const result = tapPet(this.save, Date.now())
+      this.save = result.save
+      this.saveGame()
+      this.flashMessage(result.message)
+      this.rebuildView(result.pose)
+      this.playPetBounce()
+      this.returnToIdleLater()
+    },
+
+    handleBuy(itemId) {
+      const result = buyShopItem(this.save, itemId, Date.now())
+      this.save = result.save
+      this.saveGame()
+      this.flashMessage(result.message)
+      this.rebuildView(result.didBuy ? 'happy' : undefined)
+      if (result.didBuy) {
+        this.playPetBounce()
+      }
+      this.returnToIdleLater()
+    },
+
+    toggleShop() {
+      this.showShop = !this.showShop
+    },
+
+    flashMessage(text) {
+      this.message = text
+      if (this._messageTimer) {
+        clearTimeout(this._messageTimer)
+      }
+      this._messageTimer = setTimeout(() => {
+        this.message = DEFAULT_MESSAGE
+        this._messageTimer = null
+      }, 3200)
+    },
+
+    returnToIdleLater() {
+      if (this._poseTimer) {
+        clearTimeout(this._poseTimer)
+      }
+      this._poseTimer = setTimeout(() => {
+        this.rebuildView()
+        this._poseTimer = null
+      }, 1600)
+    },
+
+    startIdleAnimator() {
+      if (this._idleStartTimer) {
+        clearTimeout(this._idleStartTimer)
+        this._idleStartTimer = null
+      }
+      if (!this.isIdlePose) {
+        return
+      }
+      this._idleStartTimer = setTimeout(() => {
+        this._idleStartTimer = null
+        try {
+          const animator = this.$element('petAnimator')
+          if (animator && this.isIdlePose) {
+            animator.start()
+          }
+        } catch (error) {}
+      }, 60)
+    },
+
+    playPetBounce() {
+      if (this._bounceTimer) {
+        clearTimeout(this._bounceTimer)
+      }
+      this._bounceTimer = setTimeout(() => {
+        this._bounceTimer = null
+        try {
+          const pet = this.$element('petStage')
+          if (!pet) {
+            return
+          }
+          const animation = pet.animate(
+            [
+              {
+                time: 0,
+                transform: { translateY: '0px', scale: 1 },
+              },
+              {
+                time: 45,
+                transform: { translateY: '-10px', scale: 1.05 },
+              },
+              {
+                time: 100,
+                transform: { translateY: '0px', scale: 1 },
+              },
+            ],
+            {
+              id: 'pet-bounce',
+              duration: 420,
+              easing: 'ease-out',
+            }
+          )
+          animation.play()
+        } catch (error) {}
+      }, 40)
+    },
+
+    clearTimers() {
+      if (this._messageTimer) {
+        clearTimeout(this._messageTimer)
+        this._messageTimer = null
+      }
+      if (this._poseTimer) {
+        clearTimeout(this._poseTimer)
+        this._poseTimer = null
+      }
+      if (this._idleStartTimer) {
+        clearTimeout(this._idleStartTimer)
+        this._idleStartTimer = null
+      }
+      if (this._bounceTimer) {
+        clearTimeout(this._bounceTimer)
+        this._bounceTimer = null
+      }
+      if (this._nameFocusTimer) {
+        clearTimeout(this._nameFocusTimer)
+        this._nameFocusTimer = null
+      }
+    },
+  }
+</script>
+
+<style lang="scss">
+  @import './../../assets/styles/style.scss';
+
+  .page {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background-color: #ffe6c6;
+    overflow: hidden;
+  }
+
+  .room-bg {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .content {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .top-bar {
+    position: absolute;
+    right: 30px;
+    top: 12px;
+    width: 500px;
+    height: 200px;
+    flex-direction: column;
+    align-items: flex-end;
+  }
+
+  .coin-pill,
+  .checkin-pill,
+  .step-pill {
+    height: 38px;
+    border-radius: 17px;
+    border-width: 2px;
+    border-color: rgba(255, 255, 255, 0.76);
+    background-color: rgba(255, 248, 232, 0.76);
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 7px;
+  }
+
+  .coin-pill {
+    width: 135px;
+    margin-top: 10px;
+  }
+
+  .step-pill {
+    width: 134px;
+    flex-direction: column;
+  }
+
+  .checkin-pill {
+    width: 110px;
+  }
+
+  .mini-icon {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    margin-right: 4px;
+  }
+
+  .coin-text {
+    font-size: 18px;
+    color: #6f4118;
+  }
+
+  .step-title {
+    font-size: 14px;
+    color: #6f4118;
+    text-align: center;
+  }
+
+  .step-sub,
+  .checkin-sub,
+  .action-stock {
+    font-size: 12px;
+    color: #a36c31;
+    text-align: center;
+  }
+
+  .checkin-text {
+    font-size: 14px;
+    color: #6f4118;
+  }
+
+  .pet-zone {
+    position: absolute;
+    left: 105px;
+    top: 220px;
+    width: 256px;
+    height: 210px;
+    overflow: visible;
+  }
+
+  .pet-stage {
+    position: relative;
+    width: 256px;
+    height: 256px;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+  }
+
+  .pet-sprite {
+    width: 256px;
+    height: 256px;
+    object-fit: contain;
+  }
+
+  .bow-accessory {
+    position: absolute;
+    left: 156px;
+    top: 60px;
+    width: 58px;
+    height: 58px;
+    object-fit: contain;
+  }
+
+  .info-panel {
+    position: absolute;
+    left: 30px;
+    top: 10px;
+    width: 220px;
+    height: 146px;
+    border-radius: 16px;
+    border-width: 2px;
+    border-color: rgba(255, 255, 255, 0.48);
+    background-color: rgba(255, 248, 232, 0.58);
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    flex-direction: column;
+  }
+
+  .pet-line {
+    width: 196px;
+    height: 22px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .pet-name {
+    width: 72px;
+    font-size: 18px;
+    color: #6f4118;
+  }
+
+  .pet-meta {
+    width: 122px;
+    font-size: 12px;
+    color: #8f6338;
+    text-align: right;
+  }
+
+  .exp-row,
+  .status-row {
+    width: 196px;
+    height: 20px;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .exp-label,
+  .status-label,
+  .status-value,
+  .exp-text {
+    font-size: 13px;
+    color: #6f4118;
+  }
+
+  .exp-label {
+    width: 34px;
+  }
+
+  .exp-text {
+    width: 44px;
+    text-align: right;
+  }
+
+  .exp-track {
+    width: 116px;
+    height: 9px;
+    border-radius: 5px;
+    background-color: rgba(122, 80, 38, 0.18);
+  }
+
+  .exp-fill {
+    height: 9px;
+    border-radius: 5px;
+    background-color: #79c7bd;
+  }
+
+  .status-icon {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    margin-right: 4px;
+  }
+
+  .status-label {
+    width: 36px;
+  }
+
+  .status-track {
+    width: 100px;
+    height: 9px;
+    border-radius: 5px;
+    background-color: rgba(122, 80, 38, 0.16);
+  }
+
+  .status-fill {
+    height: 9px;
+    border-radius: 5px;
+  }
+
+  .status-value {
+    width: 30px;
+    text-align: right;
+  }
+
+  .message {
+    position: absolute;
+    left: 120px;
+    top: 250px;
+    width: 434px;
+    height: 25px;
+    border-radius: 12px;
+    background-color: rgba(255, 255, 255, 0.75);
+    color: #7c4d20;
+    font-size: 15px;
+    text-align: center;
+  }
+
+  .action-row {
+    position: absolute;
+    left: 40px;
+    top: 450px;
+    width: 100%;
+    height: 80px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  .action-button {
+    width: 68px;
+    height: 62px;
+    border-radius: 25px;
+    border-width: 2px;
+    border-color: rgba(255, 255, 255, 0.9);
+    background-color: rgba(255, 248, 232, 0.9);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin-right: 10px;
+  }
+
+  .shop-button {
+    background-color: rgba(236, 252, 247, 0.93);
+  }
+
+  .action-icon {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+  }
+
+  .action-label {
+    font-size: 14px;
+    color: #6f4118;
+  }
+
+  .shop-panel {
+    position: absolute;
+    left: 16px;
+    top: 54px;
+    width: 434px;
+    height: 382px;
+    border-radius: 20px;
+    border-width: 2px;
+    border-color: #f4bd72;
+    background-color: rgba(255, 248, 236, 0.96);
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    flex-direction: column;
+  }
+
+  .shop-head {
+    width: 402px;
+    height: 34px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .shop-title {
+    font-size: 21px;
+    color: #6f4118;
+  }
+
+  .shop-close {
+    width: 58px;
+    height: 30px;
+    border-radius: 14px;
+    background-color: #f2d5a8;
+    color: #6f4118;
+    font-size: 15px;
+    text-align: center;
+  }
+
+  .shop-list {
+    width: 402px;
+    height: 318px;
+    flex-direction: column;
+  }
+
+  .shop-item {
+    width: 402px;
+    height: 56px;
+    border-radius: 16px;
+    background-color: #ffffff;
+    margin-top: 7px;
+    padding-left: 8px;
+    padding-right: 8px;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .shop-icon {
+    width: 42px;
+    height: 42px;
+    object-fit: contain;
+    margin-right: 8px;
+  }
+
+  .shop-copy {
+    width: 228px;
+    height: 46px;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .shop-name {
+    font-size: 17px;
+    color: #6f4118;
+  }
+
+  .shop-desc {
+    font-size: 13px;
+    color: #9b744b;
+  }
+
+  .shop-price-box {
+    width: 102px;
+    height: 38px;
+    border-radius: 16px;
+    background-color: #fff0c7;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .price-icon {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    margin-right: 3px;
+  }
+
+  .shop-price {
+    font-size: 15px;
+    color: #6f4118;
+  }
+
+  .name-mask {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(82, 49, 23, 0.45);
+    align-items: center;
+    justify-content: center;
+  }
+
+  .name-card {
+    width: 330px;
+    height: 236px;
+    border-radius: 20px;
+    border-width: 2px;
+    border-color: #f4bd72;
+    background-color: #fff8ec;
+    padding-left: 22px;
+    padding-right: 22px;
+    padding-top: 18px;
+    padding-bottom: 18px;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .name-title {
+    width: 286px;
+    height: 34px;
+    color: #6f4118;
+    font-size: 23px;
+    text-align: center;
+  }
+
+  .name-desc {
+    width: 286px;
+    height: 24px;
+    color: #9b744b;
+    font-size: 14px;
+    text-align: center;
+  }
+
+  .name-input {
+    width: 258px;
+    height: 48px;
+    margin-top: 14px;
+    border-radius: 18px;
+    border-width: 2px;
+    border-color: #f2d5a8;
+    background-color: #ffffff;
+    color: #6f4118;
+    caret-color: #6f4118;
+    placeholder-color: #b09068;
+    font-size: 19px;
+    text-align: center;
+  }
+
+  .name-actions {
+    width: 258px;
+    height: 42px;
+    margin-top: 18px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .name-button {
+    width: 118px;
+    height: 38px;
+    border-radius: 18px;
+    font-size: 17px;
+    text-align: center;
+  }
+
+  .secondary {
+    background-color: #f2d5a8;
+    color: #6f4118;
+  }
+
+  .primary {
+    background-color: #79c7bd;
+    color: #ffffff;
+  }
+</style>

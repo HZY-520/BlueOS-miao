@@ -1,0 +1,11 @@
+node_modules/
+build/
+dist/
+output/
+sign/
+.ide/
+
+*.rpk
+*.log
+.DS_Store
+Thumbs.db

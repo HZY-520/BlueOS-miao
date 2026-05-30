@@ -1,0 +1,50 @@
+{
+  "package": "miao.game.lico",
+  "name": "宠物物语",
+  "versionName": "1.0.0",
+  "versionCode": 1,
+  "appCategory": [
+    "other"
+  ],
+  "icon": "/assets/images/app_icon.png",
+  "features": [
+    {
+      "name": "blueos.app.appmanager.router"
+    },
+    {
+      "name": "blueos.health.health"
+    },
+    {
+      "name": "blueos.hardware.sensor.sensor"
+    },
+    {
+      "name": "blueos.storage.storage"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "watch.permission.READ_HEALTH_DATA"
+    },
+    {
+      "name": "watch.permission.STEP_COUNTER"
+    }
+  ],
+  "deviceTypeList": [
+    "watch",
+    "watch-square"
+  ],
+  "config": {
+    "designWidth": 466
+  },
+  "router": {
+    "entry": "pages/Demo",
+    "pages": {
+      "pages/Demo": {
+        "component": "index"
+      }
+    }
+  },
+  "display": {
+    "backgroundColor": "#ffffff"
+  }
+}
