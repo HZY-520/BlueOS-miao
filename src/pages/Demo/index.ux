@@ -118,12 +118,14 @@
       <div class="name-card">
         <text class="name-title">给猫咪取个名字</text>
         <text class="name-desc">{{ nameDesc }}</text>
+        <div class="name-input" onclick="focusNameInput">
+          <text class="name-input-text">{{ nameInputText }}</text>
+        </div>
         <input
-          class="name-input"
+          show="false"
           id="nameInput"
           type="text"
           value="{{ draftPetName }}"
-          placeholder="输入名字"
           onchange="handleNameInput" />
         <div class="name-actions">
           <text class="name-button secondary" onclick="focusNameInput">
@@ -138,7 +140,6 @@
 
 <script>
   import health from '@blueos.health.health'
-  import sensor from '@blueos.hardware.sensor.sensor'
   import storage from '@blueos.storage.storage'
   import {
     SAVE_KEY,
@@ -184,8 +185,8 @@
       showShop: false,
       showNameSetup: false,
       draftPetName: '',
+      nameInputText: '点这里输入名字',
       nameDesc: '这是它以后显示的宠物名字',
-      liveStepText: '',
     },
 
     onInit() {
@@ -196,7 +197,6 @@
 
     onReady() {
       this.startIdleAnimator()
-      this.focusNameInputLater()
     },
 
     onShow() {
@@ -205,7 +205,6 @@
       this.ensureNameSetup()
       this.rebuildView()
       this.refreshTodaySteps({ shouldRedeem: true, silent: true, auto: true })
-      this.startStepCounter()
     },
 
     onHide() {
@@ -232,11 +231,11 @@
       const name = this.save.petName || ''
       this.petName = name || '猫猫'
       this.draftPetName = this.draftPetName || name
+      this.updateNameInputText()
       this.showNameSetup = !name
       if (this.showNameSetup) {
         this.showShop = false
         this.nameDesc = '这是它以后显示的宠物名字'
-        this.focusNameInputLater()
       }
     },
 
@@ -254,7 +253,6 @@
     persistAndStop() {
       this.save.lastSeenAt = Date.now()
       this.saveGame()
-      this.stopStepCounter()
       this.clearTimers()
     },
 
@@ -407,45 +405,15 @@
       return 0
     },
 
-    startStepCounter() {
-      if (this._sensorActive) {
-        return
-      }
-      try {
-        this._sensorBase = null
-        sensor.subscribeStepCounter({
-          callback: (ret) => {
-            const steps = ret && ret.steps ? Number(ret.steps) : 0
-            this._lastSensorSteps = Math.max(0, steps)
-            if (this._sensorBase === null) {
-              this._sensorBase = steps
-            }
-            const liveSteps = Math.max(0, steps - this._sensorBase)
-            this.liveStepText = liveSteps > 0 ? `实时 +${liveSteps}` : ''
-          },
-          fail: () => {
-            this.liveStepText = ''
-          },
-        })
-        this._sensorActive = true
-      } catch (error) {
-        this.liveStepText = ''
-      }
-    },
-
-    stopStepCounter() {
-      if (!this._sensorActive) {
-        return
-      }
-      try {
-        sensor.unsubscribeStepCounter()
-      } catch (error) {}
-      this._sensorActive = false
-    },
-
     handleNameInput({ value }) {
       this.draftPetName = value || ''
+      this.updateNameInputText()
       this.nameDesc = '这是它以后显示的宠物名字'
+    },
+
+    updateNameInputText() {
+      const name = (this.draftPetName || '').trim()
+      this.nameInputText = name || '点这里输入名字'
     },
 
     focusNameInput() {
@@ -457,26 +425,12 @@
       } catch (error) {}
     },
 
-    focusNameInputLater() {
-      if (!this.showNameSetup) {
-        return
-      }
-      if (this._nameFocusTimer) {
-        clearTimeout(this._nameFocusTimer)
-      }
-      this._nameFocusTimer = setTimeout(() => {
-        this._nameFocusTimer = null
-        this.focusNameInput()
-      }, 220)
-    },
-
     confirmPetName() {
       const result = setPetName(this.save, this.draftPetName, Date.now())
       this.save = result.save
       if (!result.didSet) {
         this.nameDesc = result.message
         this.flashMessage(result.message)
-        this.focusNameInputLater()
         return
       }
       this.saveGame()
@@ -596,6 +550,10 @@
         this._idleStartTimer = null
       }
       if (!this.isIdlePose) {
+        this._idleRunning = false
+        return
+      }
+      if (this._idleRunning) {
         return
       }
       this._idleStartTimer = setTimeout(() => {
@@ -604,46 +562,46 @@
           const animator = this.$element('petAnimator')
           if (animator && this.isIdlePose) {
             animator.start()
+            this._idleRunning = true
           }
         } catch (error) {}
       }, 60)
     },
 
     playPetBounce() {
-      if (this._bounceTimer) {
-        clearTimeout(this._bounceTimer)
+      const now = Date.now()
+      if (this._lastBounceAt && now - this._lastBounceAt < 260) {
+        return
       }
-      this._bounceTimer = setTimeout(() => {
-        this._bounceTimer = null
-        try {
-          const pet = this.$element('petStage')
-          if (!pet) {
-            return
-          }
-          const animation = pet.animate(
-            [
-              {
-                time: 0,
-                transform: { translateY: '0px', scale: 1 },
-              },
-              {
-                time: 45,
-                transform: { translateY: '-10px', scale: 1.05 },
-              },
-              {
-                time: 100,
-                transform: { translateY: '0px', scale: 1 },
-              },
-            ],
+      this._lastBounceAt = now
+      try {
+        const pet = this.$element('petStage')
+        if (!pet) {
+          return
+        }
+        const animation = pet.animate(
+          [
             {
-              id: 'pet-bounce',
-              duration: 420,
-              easing: 'ease-out',
-            }
-          )
-          animation.play()
-        } catch (error) {}
-      }, 40)
+              time: 0,
+              transform: { translateY: '0px', scale: 1 },
+            },
+            {
+              time: 42,
+              transform: { translateY: '-8px', scale: 1.03 },
+            },
+            {
+              time: 100,
+              transform: { translateY: '0px', scale: 1 },
+            },
+          ],
+          {
+            id: 'pet-bounce',
+            duration: 320,
+            easing: 'ease-out',
+          }
+        )
+        animation.play()
+      } catch (error) {}
     },
 
     clearTimers() {
@@ -662,10 +620,6 @@
       if (this._bounceTimer) {
         clearTimeout(this._bounceTimer)
         this._bounceTimer = null
-      }
-      if (this._nameFocusTimer) {
-        clearTimeout(this._nameFocusTimer)
-        this._nameFocusTimer = null
       }
     },
   }
@@ -1111,9 +1065,14 @@
     border-width: 2px;
     border-color: #f2d5a8;
     background-color: #ffffff;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .name-input-text {
+    width: 246px;
+    height: 42px;
     color: #6f4118;
-    caret-color: #6f4118;
-    placeholder-color: #b09068;
     font-size: 19px;
     text-align: center;
   }

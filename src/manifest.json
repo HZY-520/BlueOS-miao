@@ -15,18 +15,12 @@
       "name": "blueos.health.health"
     },
     {
-      "name": "blueos.hardware.sensor.sensor"
-    },
-    {
       "name": "blueos.storage.storage"
     }
   ],
   "permissions": [
     {
       "name": "watch.permission.READ_HEALTH_DATA"
-    },
-    {
-      "name": "watch.permission.STEP_COUNTER"
     }
   ],
   "deviceTypeList": [
