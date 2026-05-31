@@ -3,6 +3,7 @@ export const SAVE_KEY = 'miao.pet.save.v1'
 const DAY_MS = 24 * 60 * 60 * 1000
 const MIN_STATUS = 12
 const MAX_STATUS = 100
+const DAILY_TAP_REWARD_LIMIT = 20
 
 export const PET_STAGES = [
   { id: 'kitten', name: '幼猫', minDays: 0, minLevel: 1 },
@@ -158,6 +159,8 @@ export function createDefaultSave(now = Date.now()) {
     accessories: { bow: false },
     claimedStepsDate: today,
     claimedStepsToday: 0,
+    petTapDate: today,
+    petTapCount: 0,
     lastCheckInDate: '',
     checkInStreak: 0,
   }
@@ -207,6 +210,13 @@ export function normalizeSave(value, now = Date.now()) {
   if (save.claimedStepsDate !== today) {
     save.claimedStepsDate = today
     save.claimedStepsToday = 0
+  }
+  save.petTapDate =
+    typeof save.petTapDate === 'string' ? save.petTapDate : today
+  save.petTapCount = toNonNegativeInt(save.petTapCount, 0)
+  if (save.petTapDate !== today) {
+    save.petTapDate = today
+    save.petTapCount = 0
   }
   save.lastCheckInDate =
     typeof save.lastCheckInDate === 'string' ? save.lastCheckInDate : ''
@@ -411,6 +421,20 @@ export function useActionItem(value, actionId, now = Date.now()) {
 
 export function tapPet(value, now = Date.now()) {
   const save = normalizeSave(value, now)
+  const tapCount = Math.min(save.petTapCount, DAILY_TAP_REWARD_LIMIT)
+  if (tapCount >= DAILY_TAP_REWARD_LIMIT) {
+    save.petTapCount = DAILY_TAP_REWARD_LIMIT
+    save.lastSeenAt = now
+    return {
+      save,
+      didTap: false,
+      pose: 'happy',
+      message: `今日摸摸奖励已达上限（${DAILY_TAP_REWARD_LIMIT}/${DAILY_TAP_REWARD_LIMIT}）`,
+    }
+  }
+
+  save.petTapCount = tapCount + 1
+  save.petTapDate = dateKey(now)
   applyEffects(save, { mood: 1 })
   addExp(save, 1)
   save.lastSeenAt = now
@@ -418,7 +442,7 @@ export function tapPet(value, now = Date.now()) {
     save,
     didTap: true,
     pose: 'happy',
-    message: `摸摸${save.petName || '猫猫'}，心情 +1，经验 +1`,
+    message: `摸摸${save.petName || '猫猫'}，好感 +1，经验 +1（${save.petTapCount}/${DAILY_TAP_REWARD_LIMIT}）`,
   }
 }
 
